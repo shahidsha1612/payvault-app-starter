@@ -295,12 +295,55 @@ def run(rubric):
         "score": total_awarded,
         "possible": total_possible,
         "categories": categories_out,
+        "gate": compute_gate(rubric, categories_out, total_awarded, total_possible),
     }
     # Reproducibility receipt: a hash over the canonical report. No timestamps,
     # so re-running on an unchanged repo yields an identical receipt everywhere.
     canonical = json.dumps(report, sort_keys=True, separators=(",", ":"))
     report["receipt_sha256"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     return report
+
+
+def compute_gate(rubric, categories_out, total_awarded, total_possible):
+    """Turn the numeric score into a deterministic PASS/FAIL verdict.
+
+    A submission passes only if BOTH hold:
+      * the total score meets `gate.pass_threshold`, AND
+      * every check id in `gate.required_checks` is *fully* awarded.
+
+    Required checks are the non-negotiable deliverables (a policy suite, a valid
+    OSCAL component with real controls, an evidence script, ...). Missing any one
+    of them fails the gate no matter how high the number is — you cannot pass by
+    piling up easy points while skipping a whole layer.
+    """
+    gate_cfg = rubric.get("gate", {}) or {}
+    threshold = gate_cfg.get("pass_threshold", 0)
+    required = gate_cfg.get("required_checks", [])
+
+    awarded_by_id = {}
+    for cat in categories_out:
+        for chk in cat["checks"]:
+            awarded_by_id[chk["id"]] = (chk["awarded"], chk["points"], chk["desc"])
+
+    checklist = []
+    for cid in required:
+        awarded, points, desc = awarded_by_id.get(cid, (0, 0, f"(unknown check '{cid}')"))
+        checklist.append({
+            "id": cid,
+            "desc": desc,
+            "ok": bool(points) and awarded >= points,
+            "awarded": awarded,
+            "points": points,
+        })
+
+    threshold_met = total_awarded >= threshold
+    all_required_ok = all(item["ok"] for item in checklist)
+    return {
+        "pass_threshold": threshold,
+        "threshold_met": threshold_met,
+        "checklist": checklist,
+        "passed": bool(threshold_met and all_required_ok),
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -327,11 +370,32 @@ def render(report):
                 mark = "PART "
             lines.append(f"    {mark} {chk['awarded']:>2}/{chk['points']:<2}  "
                          f"{chk['desc']}  ({chk['detail']})")
+    # Pre-flight checklist (the pass/fail gate).
+    gate = report.get("gate", {})
+    if gate:
+        lines.append("")
+        lines.append(BAR)
+        lines.append("  PRE-FLIGHT CHECKLIST  (all must pass to clear the gate)")
+        lines.append(BAR)
+        for item in gate["checklist"]:
+            box = "[x]" if item["ok"] else "[ ]"
+            state = "OK  " if item["ok"] else "FAIL"
+            lines.append(f"    {box} {state}  {item['desc']}  "
+                         f"({item['awarded']}/{item['points']})")
+        thr = "OK  " if gate["threshold_met"] else "FAIL"
+        box = "[x]" if gate["threshold_met"] else "[ ]"
+        lines.append(f"    {box} {thr}  Total score >= pass threshold "
+                     f"({report['score']} vs {gate['pass_threshold']})")
+
     lines.append("")
     lines.append(BAR)
     pct = (100.0 * report["score"] / report["possible"]) if report["possible"] else 0.0
     grade = grade_for(pct)
     lines.append(f"  SCORE: {report['score']}/{report['possible']}  ({pct:.1f}%)   Grade: {grade}")
+    if gate:
+        lines.append(f"  GATE:  {'PASS' if gate['passed'] else 'FAIL'}"
+                     f"   (need >= {gate['pass_threshold']}/{report['possible']}"
+                     f" AND every required deliverable present)")
     lines.append(f"  Receipt: {report['receipt_sha256']}")
     lines.append(BAR)
     return "\n".join(lines)
@@ -380,6 +444,9 @@ def main(argv=None):
     parser.add_argument("--no-write", action="store_true", help="do not write score-report.json")
     parser.add_argument("--advisory", action="store_true",
                         help="also run opa/terraform if installed (never scored)")
+    parser.add_argument("--gate", action="store_true",
+                        help="enforce the pre-flight checklist: exit 1 (FAIL) if the "
+                             "pass threshold or any required deliverable is not met")
     args = parser.parse_args(argv)
 
     try:
@@ -400,13 +467,25 @@ def main(argv=None):
         print(json.dumps(report, indent=2, sort_keys=True))
     elif args.quiet:
         pct = (100.0 * report["score"] / report["possible"]) if report["possible"] else 0.0
+        gate = report.get("gate", {})
+        verdict = f"  GATE={'PASS' if gate.get('passed') else 'FAIL'}" if gate else ""
         print(f"SCORE: {report['score']}/{report['possible']} ({pct:.1f}%)  "
-              f"receipt={report['receipt_sha256'][:12]}")
+              f"receipt={report['receipt_sha256'][:12]}{verdict}")
     else:
         print(render(report))
 
     if args.advisory:
         advisory()
+
+    # In --gate mode the exit code IS the pass/fail signal (CI-friendly).
+    if args.gate and not report.get("gate", {}).get("passed", True):
+        failed = [c["id"] for c in report.get("gate", {}).get("checklist", []) if not c["ok"]]
+        sys.stderr.write(
+            "GATE FAILED: not audit-ready yet. "
+            + ("Missing required deliverables: " + ", ".join(failed) + ". " if failed else "")
+            + f"Need score >= {report['gate']['pass_threshold']} "
+            + f"(have {report['score']}). See docs/CAPSTONE.md.\n")
+        return 1
 
     return 0
 

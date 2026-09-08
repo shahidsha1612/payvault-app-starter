@@ -10,6 +10,46 @@ You get a category-by-category breakdown, a total out of 100, a letter grade,
 and a **receipt** (a SHA-256 over the report). No AWS account, no network, and
 no other tools are required to compute your score.
 
+## How to evaluate (and the pass/fail gate)
+
+The scorer does two things: it **scores** you 0–100, and it renders a
+**pre-flight checklist** — a hard pass/fail gate. A number alone lets you pile
+up easy points while skipping a whole layer; the gate stops that. To **pass**,
+you must clear **both** conditions:
+
+1. **Total score ≥ 70** (the pass threshold), and
+2. **every required deliverable is fully present** (see the checklist below).
+
+Miss either and the verdict is **FAIL** — even at 99/100, if (say) you never
+wrote an evidence script.
+
+### The required deliverables (the checklist)
+
+| Required check | What it demands |
+|----------------|-----------------|
+| `s3_public_block` | No public data — S3 public access fully blocked |
+| `no_wildcard_iam` | No `Action:"*"` — least-privilege IAM (remove the god-mode role) |
+| `policy_count` | A real policy suite — ≥5 Rego files |
+| `deny_rules` | ≥6 `deny`/`violation` rules that actually enforce something |
+| `gap_coverage` | Every `PV-0x` gap attested in a policy/OSCAL/WRITEUP |
+| `oscal_json` | A valid OSCAL component-definition (parses as JSON) |
+| `oscal_controls` | ≥6 **valid** PCI control ids mapped |
+| `verify_script` | An evidence-chain verification script exists |
+
+The authoritative list lives in `scoring/rubric.json` under `"gate"`. Any check
+short of its full points shows `[ ] FAIL` on the checklist.
+
+### Enforce it (exit code = the verdict)
+
+```bash
+python3 scoring/score.py           # report only; always exits 0
+python3 scoring/score.py --gate    # exit 0 if PASS, exit 1 (FAIL) if not met
+```
+
+`--gate` is what CI runs, so **your fork's CI stays red until it passes and turns
+green when it does** — a clear finish line. A freshly-forked starter is *meant*
+to fail the gate; that's the baseline you work up from.
+
 ## The determinism guarantee
 
 The score is a **pure function of the files in your checkout.** The scorer:
@@ -63,10 +103,11 @@ watch the number climb as you close gaps.
 
 ## Running it in CI
 
-`.github/workflows/score.yml` runs the scorer on every push and prints the
-result to the GitHub Actions **job summary**, so your fork is auto-graded and
-you can see the receipt in the run. It never fails the build on a low score — it
-just reports.
+`.github/workflows/score.yml` runs on every push: it prints the result to the
+GitHub Actions **job summary** (so you can see the score and receipt in the run)
+and then runs `--gate`, which **fails the workflow until you pass**. So the run
+is red on a fresh fork and turns green the moment your fork clears the threshold
+and all required deliverables — an automatic, per-fork finish line.
 
 ## A note on honesty
 

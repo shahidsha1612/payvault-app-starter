@@ -1,8 +1,21 @@
 {
   "workload": "PayVault",
   "framework": "PCI DSS 4.0 (primary) / SOC 2 (secondary)",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "total_points": 100,
+  "gate": {
+    "pass_threshold": 70,
+    "required_checks": [
+      "s3_public_block",
+      "no_wildcard_iam",
+      "policy_count",
+      "deny_rules",
+      "gap_coverage",
+      "oscal_json",
+      "oscal_controls",
+      "verify_script"
+    ]
+  },
   "categories": [
     {
       "id": "baseline",

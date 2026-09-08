@@ -1,10 +1,12 @@
 name: score
 
-# Auto-grades every fork on push/PR using the deterministic scorer, and writes
-# the result to the run's job summary. It never fails the build on a low score —
-# it just reports, so you can watch your number climb as you close gaps.
+# Auto-grades every fork on push/PR using the deterministic scorer, writes the
+# result to the run's job summary, and then ENFORCES the pass/fail gate:
+# the run goes RED until your fork meets the pass threshold AND every required
+# deliverable is present, and GREEN once it does. That red X is the signal that
+# the capstone isn't finished yet — not a bug. A fresh fork is expected to fail.
 #
-# This is the SCORING workflow only. The GRC gate you must build for the
+# This is the SCORING/GATE workflow only. The GRC gate you must build for the
 # pipeline points is a SEPARATE workflow you add under .github/workflows/ (see
 # docs/CAPSTONE.md for what it must contain).
 
@@ -43,3 +45,6 @@ jobs:
         with:
           name: score-report
           path: scoring/score-report.json
+
+      - name: Enforce pre-flight gate (fails until audit-ready)
+        run: python3 scoring/score.py --gate --quiet

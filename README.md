@@ -33,10 +33,14 @@ Everything you must fix is enumerated in **[GAPS.md](GAPS.md)** (10 gaps,
 python3 scoring/score.py
 ```
 
-Same repo state → same score, on any machine, no network needed. See
-**[SCORING.md](SCORING.md)** for the guarantee and the full 100-point rubric
-(`scoring/rubric.json`). A fresh fork scores near zero — that's the baseline you
-climb from.
+Same repo state → same score, on any machine, no network needed. A fresh fork
+scores near zero — that's the baseline you climb from.
+
+To **pass**, clear the gate: `python3 scoring/score.py --gate` exits 0 only if
+you score ≥ 70 **and** every required deliverable is present (else exit 1 = FAIL).
+CI enforces this — your fork stays red until it passes. See
+**[SCORING.md](SCORING.md)** for the guarantee, the checklist, and the full
+100-point rubric (`scoring/rubric.json`).
 
 ## Deploy the starter (optional, to see it work)
 

@@ -3,6 +3,21 @@
 Tick these off and your score follows. Point values in brackets map to
 `scoring/rubric.json`.
 
+## Gate — the must-pass checklist (fail if not met)
+
+`python3 scoring/score.py --gate` (and CI) **FAILS** unless you score **≥ 70**
+*and* every one of these required deliverables is fully present. Items marked
+**⛔ REQUIRED** below are the gate; the rest raise your grade toward an A.
+
+- ⛔ S3 public access fully blocked (`s3_public_block`)
+- ⛔ No wildcard IAM actions (`no_wildcard_iam`)
+- ⛔ ≥5 Rego policy files (`policy_count`)
+- ⛔ ≥6 deny/violation rules (`deny_rules`)
+- ⛔ Every gap attested (`gap_coverage`)
+- ⛔ Valid OSCAL JSON (`oscal_json`)
+- ⛔ ≥6 valid PCI controls mapped (`oscal_controls`)
+- ⛔ Evidence verification script present (`verify_script`)
+
 ## 1. Terraform GRC baseline  `terraform/`  [25]
 
 Add new `.tf` files (don't edit the flawed workload beyond removing what a fix
