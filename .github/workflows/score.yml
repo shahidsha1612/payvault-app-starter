@@ -1,0 +1,45 @@
+name: score
+
+# Auto-grades every fork on push/PR using the deterministic scorer, and writes
+# the result to the run's job summary. It never fails the build on a low score —
+# it just reports, so you can watch your number climb as you close gaps.
+#
+# This is the SCORING workflow only. The GRC gate you must build for the
+# pipeline points is a SEPARATE workflow you add under .github/workflows/ (see
+# docs/CAPSTONE.md for what it must contain).
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run deterministic self-evaluation
+        run: python3 scoring/score.py | tee score.txt
+
+      - name: Publish score to job summary
+        if: always()
+        run: |
+          {
+            echo '## PayVault self-evaluation'
+            echo ''
+            echo '```'
+            cat score.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload score report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: score-report
+          path: scoring/score-report.json

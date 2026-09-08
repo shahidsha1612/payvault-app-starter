@@ -1,0 +1,68 @@
+{
+  "workload": "PayVault",
+  "framework": "PCI DSS 4.0 (primary) / SOC 2 (secondary)",
+  "version": "1.0.0",
+  "total_points": 100,
+  "categories": [
+    {
+      "id": "baseline",
+      "title": "Terraform GRC Baseline (encryption, isolation, audit)",
+      "points": 25,
+      "checks": [
+        {"id": "kms_cmk", "desc": "Customer-managed KMS key defined", "points": 4, "type": "contains_all", "glob": "terraform/**/*.tf", "patterns": ["resource\\s+\"aws_kms_key\""]},
+        {"id": "ddb_sse", "desc": "DynamoDB encrypted at rest with CMK", "points": 4, "type": "contains_all", "glob": "terraform/**/*.tf", "patterns": ["server_side_encryption", "kms_key_arn|kms_master_key_id|key_arn"]},
+        {"id": "s3_sse", "desc": "S3 receipts encrypted (SSE-KMS)", "points": 3, "type": "contains_all", "glob": "terraform/**/*.tf", "patterns": ["aws_s3_bucket_server_side_encryption_configuration|apply_server_side_encryption_by_default"]},
+        {"id": "s3_public_block", "desc": "S3 public access fully blocked", "points": 3, "type": "contains_all", "glob": "terraform/**/*.tf", "patterns": ["aws_s3_bucket_public_access_block", "block_public_acls\\s*=\\s*true"]},
+        {"id": "cloudtrail", "desc": "CloudTrail (or equivalent) audit trail present", "points": 3, "type": "contains_all", "glob": "terraform/**/*.tf", "patterns": ["resource\\s+\"aws_cloudtrail\""]},
+        {"id": "no_wildcard_iam", "desc": "No wildcard (*) IAM actions (least privilege)", "points": 4, "type": "not_contains", "glob": "terraform/**/*.tf", "patterns": ["\"Action\"\\s*:\\s*\"\\*\"", "\"Action\"\\s*:\\s*\\[\\s*\"\\*\"", "Action\\s*=\\s*\"\\*\"", "actions\\s*=\\s*\\[\\s*\"\\*\"\\s*\\]"]},
+        {"id": "tls_policy", "desc": "TLS enforced on the API edge", "points": 2, "type": "contains_any", "glob": "terraform/**/*.tf", "patterns": ["security_policy", "minimum_protocol_version", "ssl_policy", "minimum_tls"]},
+        {"id": "evidence_lock", "desc": "Evidence vault uses S3 Object Lock", "points": 2, "type": "contains_all", "glob": "terraform/**/*.tf", "patterns": ["object_lock_enabled|object_lock_configuration"]}
+      ]
+    },
+    {
+      "id": "policies",
+      "title": "OPA / Rego Policy Suite (gap detection as code)",
+      "points": 25,
+      "checks": [
+        {"id": "policy_count", "desc": "At least 5 Rego policy files", "points": 6, "type": "glob_min", "glob": "policies/**/*.rego", "min": 5},
+        {"id": "test_count", "desc": "At least 8 Rego unit tests", "points": 6, "type": "rego_tests_min", "glob": "policies/**/*.rego", "min": 8},
+        {"id": "deny_rules", "desc": "At least 6 deny/violation rules", "points": 5, "type": "rego_rules_min", "glob": "policies/**/*.rego", "min": 6},
+        {"id": "control_refs", "desc": "Policies cite PCI control ids", "points": 4, "type": "contains_any", "glob": "policies/**/*.rego", "patterns": ["3\\.[0-9]", "10\\.[0-9]", "PCI", "req[_ -]?[0-9]"]},
+        {"id": "gap_coverage", "desc": "Every gap attested in a remediation artifact", "points": 4, "type": "gap_coverage", "gaps_file": "GAPS.md", "gap_id_pattern": "\\bPV-\\d{2}\\b", "coverage_globs": ["policies/**/*.rego", "oscal/**/*.json", "WRITEUP.md"]}
+      ]
+    },
+    {
+      "id": "pipeline",
+      "title": "GitHub Actions GRC Gate",
+      "points": 15,
+      "checks": [
+        {"id": "gate_stages", "desc": "Workflow runs plan -> policy check -> apply", "points": 6, "type": "contains_all", "glob": ".github/workflows/*.y*ml", "patterns": ["terraform\\s+plan", "conftest|opa\\s+test", "terraform\\s+apply"]},
+        {"id": "signing", "desc": "Artifacts signed (cosign/sigstore)", "points": 4, "type": "contains_any", "glob": ".github/workflows/*.y*ml", "patterns": ["cosign", "sigstore"]},
+        {"id": "evidence_push", "desc": "Evidence uploaded to an S3 vault", "points": 5, "type": "contains_any", "glob": ".github/workflows/*.y*ml", "patterns": ["aws s3 cp", "s3api put-object", "aws s3 sync"]}
+      ]
+    },
+    {
+      "id": "oscal",
+      "title": "OSCAL Component Definition",
+      "points": 20,
+      "checks": [
+        {"id": "oscal_json", "desc": "OSCAL file is valid JSON", "points": 4, "type": "json_valid", "glob": "oscal/**/*.json"},
+        {"id": "oscal_shape", "desc": "Has component-definition + implemented-requirements", "points": 3, "type": "contains_all", "glob": "oscal/**/*.json", "patterns": ["component-definition", "implemented-requirement"]},
+        {"id": "oscal_controls", "desc": "Maps >=6 valid PCI controls", "points": 8, "type": "oscal_controls", "glob": "oscal/**/*.json", "min": 6},
+        {"id": "oscal_framework", "desc": "References PCI DSS as the framework", "points": 2, "type": "contains_any", "glob": "oscal/**/*.json", "patterns": ["PCI", "payment card", "pci-dss"]},
+        {"id": "oscal_readme", "desc": "OSCAL README with validation notes", "points": 3, "type": "exists", "glob": "oscal/**/README*"}
+      ]
+    },
+    {
+      "id": "evidence",
+      "title": "Evidence Chain (integrity + immutability)",
+      "points": 15,
+      "checks": [
+        {"id": "verify_script", "desc": "Evidence verification script present", "points": 4, "type": "exists", "glob": "scripts/**/*.sh"},
+        {"id": "hashing", "desc": "Uses SHA-256 checksums", "points": 3, "type": "contains_any", "glob": "scripts/**/*.sh", "patterns": ["sha256sum", "shasum\\s+-a\\s+256", "sha256"]},
+        {"id": "sig_verify", "desc": "Verifies cryptographic signatures", "points": 4, "type": "contains_any", "glob": "scripts/**/*.sh", "patterns": ["cosign\\s+verify", "cosign\\s+sign", "gpg\\s+--verify"]},
+        {"id": "immutability", "desc": "Checks S3 Object Lock immutability", "points": 4, "type": "contains_any", "glob": "scripts/**/*.sh", "patterns": ["object-lock", "ObjectLock", "GOVERNANCE", "COMPLIANCE"]}
+      ]
+    }
+  ]
+}

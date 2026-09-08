@@ -1,0 +1,21 @@
+# Terraform
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+terraform/build/
+crash.log
+
+# Python
+__pycache__/
+*.pyc
+
+# Scorer output is regenerated on every run; commit it only if you want to
+# snapshot a score. It contains no secrets.
+scoring/score-report.json
+
+# Evidence / local artifacts
+*.sig
+*.pem
+evidence/
+.env

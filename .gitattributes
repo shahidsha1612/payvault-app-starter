@@ -1,0 +1,5 @@
+# Normalize line endings so the deterministic scorer sees identical bytes
+# regardless of the OS a contributor forked from.
+* text=auto eol=lf
+*.png binary
+*.zip binary
